@@ -44,7 +44,7 @@ export default function Home() {
         <nav className={styles.nav}>
           <a href="#services">サービス</a>
           <a href="#about">Neqpolaとは</a>
-          <a href="#services" className={styles.loginButton}>
+          <a href="/login" className={styles.loginButton}>
             ログイン
           </a>
         </nav>
@@ -78,7 +78,7 @@ export default function Home() {
             </p>
 
             <div className={styles.heroActions}>
-              <a href="#services" className={styles.primaryButton}>
+              <a href="/login" className={styles.primaryButton}>
                 <span>Neqpolaをはじめる</span>
                 <span className={styles.buttonArrow}>→</span>
               </a>
@@ -244,7 +244,7 @@ export default function Home() {
             これから始まる、新しい「つながり」。
           </p>
 
-          <a href="#services" className={styles.ctaButton}>
+          <a href="/login" className={styles.ctaButton}>
             Neqpolaをはじめる
             <span>→</span>
           </a>
