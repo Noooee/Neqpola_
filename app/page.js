@@ -5,7 +5,7 @@ const services = [
     icon: "🌐",
     title: "Neqpola SNS",
     description: "みんなとつながって、好きなことを共有しよう。",
-    href: "#",
+    href: "/sns",
     className: styles.sns,
   },
   {
@@ -43,8 +43,13 @@ export default function Home() {
 
         <nav className={styles.nav}>
           <a href="#services">サービス</a>
+
           <a href="#about">Neqpolaとは</a>
-          <a href="/login" className={styles.loginButton}>
+
+          <a
+            href="/login"
+            className={styles.loginButton}
+          >
             ログイン
           </a>
         </nav>
@@ -78,12 +83,18 @@ export default function Home() {
             </p>
 
             <div className={styles.heroActions}>
-              <a href="/login" className={styles.primaryButton}>
+              <a
+                href="/login"
+                className={styles.primaryButton}
+              >
                 <span>Neqpolaをはじめる</span>
                 <span className={styles.buttonArrow}>→</span>
               </a>
 
-              <a href="#services" className={styles.secondaryButton}>
+              <a
+                href="#services"
+                className={styles.secondaryButton}
+              >
                 サービスを見る
               </a>
             </div>
@@ -148,13 +159,18 @@ export default function Home() {
       </section>
 
       {/* Services */}
-      <section id="services" className={styles.services}>
+      <section
+        id="services"
+        className={styles.services}
+      >
         <div className={styles.sectionHeading}>
           <span className={styles.sectionLabel}>
             NEQPOLA SERVICES
           </span>
 
-          <h2>Neqpolaのサービス</h2>
+          <h2>
+            Neqpolaのサービス
+          </h2>
 
           <p>
             ひとつの場所から、
@@ -175,13 +191,19 @@ export default function Home() {
                   {service.icon}
                 </div>
 
-                <span className={styles.serviceArrow}>↗</span>
+                <span className={styles.serviceArrow}>
+                  ↗
+                </span>
               </div>
 
               <div className={styles.serviceInfo}>
-                <h3>{service.title}</h3>
+                <h3>
+                  {service.title}
+                </h3>
 
-                <p>{service.description}</p>
+                <p>
+                  {service.description}
+                </p>
               </div>
 
               <div className={styles.cardLine} />
@@ -191,7 +213,10 @@ export default function Home() {
       </section>
 
       {/* About */}
-      <section id="about" className={styles.about}>
+      <section
+        id="about"
+        className={styles.about}
+      >
         <div className={styles.aboutBackground}>
           <div className={styles.aboutGlow} />
         </div>
@@ -244,7 +269,10 @@ export default function Home() {
             これから始まる、新しい「つながり」。
           </p>
 
-          <a href="/login" className={styles.ctaButton}>
+          <a
+            href="/login"
+            className={styles.ctaButton}
+          >
             Neqpolaをはじめる
             <span>→</span>
           </a>
@@ -254,13 +282,20 @@ export default function Home() {
       {/* Footer */}
       <footer className={styles.footer}>
         <div className={styles.footerInner}>
-          <a href="/" className={styles.footerLogo}>
-            <span className={styles.logoMark}>N</span>
+          <a
+            href="/"
+            className={styles.footerLogo}
+          >
+            <span className={styles.logoMark}>
+              N
+            </span>
+
             <strong>Neqpola</strong>
           </a>
 
           <p>
-            © {new Date().getFullYear()} Neqpola. All rights reserved.
+            © {new Date().getFullYear()} Neqpola.
+            All rights reserved.
           </p>
         </div>
       </footer>
