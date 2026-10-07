@@ -39,6 +39,13 @@ export default function SNSPage() {
   const [likedPosts, setLikedPosts] = useState(new Set());
   const [likeLoading, setLikeLoading] = useState({});
 
+  const [commentsByPost, setCommentsByPost] = useState({});
+  const [commentCounts, setCommentCounts] = useState({});
+  const [commentText, setCommentText] = useState({});
+  const [expandedComments, setExpandedComments] = useState(new Set());
+  const [commentLoading, setCommentLoading] = useState({});
+  const [replyingTo, setReplyingTo] = useState({});
+
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [loadingPosts, setLoadingPosts] = useState(false);
@@ -73,11 +80,14 @@ export default function SNSPage() {
 
       setUser(user);
 
-      const { data: ownProfile, error: profileError } = await supabase
-        .from("profiles")
-        .select("id, username, display_name, bio, avatar_url")
-        .eq("id", user.id)
-        .maybeSingle();
+      const { data: ownProfile, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select(
+            "id, username, display_name, bio, avatar_url"
+          )
+          .eq("id", user.id)
+          .maybeSingle();
 
       if (!mounted) {
         return;
@@ -100,11 +110,13 @@ export default function SNSPage() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        router.replace("/login");
+    } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!session) {
+          router.replace("/login");
+        }
       }
-    });
+    );
 
     return () => {
       mounted = false;
@@ -116,10 +128,15 @@ export default function SNSPage() {
     setLoadingPosts(true);
     setError("");
 
-    const { data, error: postsError } = await supabase
-      .from("posts")
-      .select("id, user_id, content, created_at")
-      .order("created_at", { ascending: false });
+    const { data, error: postsError } =
+      await supabase
+        .from("posts")
+        .select(
+          "id, user_id, content, created_at"
+        )
+        .order("created_at", {
+          ascending: false,
+        });
 
     if (postsError) {
       setError("投稿を読み込めませんでした。");
@@ -133,58 +150,131 @@ export default function SNSPage() {
 
     /*
      * ==========================================
-     * いいね情報を取得
+     * いいね情報
      * ==========================================
      */
 
-    const postIds = postList.map((post) => post.id);
+    const postIds = postList.map(
+      (post) => post.id
+    );
 
     if (postIds.length === 0) {
       setLikeCounts({});
       setLikedPosts(new Set());
-    } else {
-      const { data: likeData, error: likesError } = await supabase
-        .from("likes")
-        .select("post_id, user_id")
-        .in("post_id", postIds);
-
-      if (likesError) {
-        setError("いいね情報を読み込めませんでした。");
-      } else {
-        const countMap = {};
-        const likedSet = new Set();
-
-        for (const like of likeData || []) {
-          countMap[like.post_id] = (countMap[like.post_id] || 0) + 1;
-
-          if (like.user_id === currentUserId) {
-            likedSet.add(like.post_id);
-          }
-        }
-
-        setLikeCounts(countMap);
-        setLikedPosts(likedSet);
-      }
-    }
-
-    /*
-     * ==========================================
-     * 投稿者プロフィールを取得
-     * ==========================================
-     */
-
-    const userIds = [...new Set(postList.map((post) => post.user_id))];
-
-    if (userIds.length === 0) {
+      setCommentsByPost({});
+      setCommentCounts({});
       setProfiles({});
       setLoadingPosts(false);
       return;
     }
 
-    const { data: profileData, error: profilesError } = await supabase
+    const {
+      data: likeData,
+      error: likesError,
+    } = await supabase
+      .from("likes")
+      .select("post_id, user_id")
+      .in("post_id", postIds);
+
+    if (likesError) {
+      setError(
+        "いいね情報を読み込めませんでした。"
+      );
+    } else {
+      const countMap = {};
+      const likedSet = new Set();
+
+      for (const like of likeData || []) {
+        countMap[like.post_id] =
+          (countMap[like.post_id] || 0) + 1;
+
+        if (
+          like.user_id === currentUserId
+        ) {
+          likedSet.add(like.post_id);
+        }
+      }
+
+      setLikeCounts(countMap);
+      setLikedPosts(likedSet);
+    }
+
+    /*
+     * ==========================================
+     * コメント情報
+     * ==========================================
+     */
+
+    const {
+      data: commentData,
+      error: commentsError,
+    } = await supabase
+      .from("comments")
+      .select(
+        "id, post_id, user_id, content, created_at, parent_comment_id"
+      )
+      .in("post_id", postIds)
+      .order("created_at", {
+        ascending: true,
+      });
+
+    if (commentsError) {
+      setError(
+        "コメント情報を読み込めませんでした。"
+      );
+    } else {
+      const commentsMap = {};
+      const commentCountMap = {};
+
+      for (const comment of commentData || []) {
+        if (!commentsMap[comment.post_id]) {
+          commentsMap[comment.post_id] = [];
+        }
+
+        commentsMap[comment.post_id].push(
+          comment
+        );
+
+        commentCountMap[comment.post_id] =
+          (commentCountMap[comment.post_id] || 0) +
+          1;
+      }
+
+      setCommentsByPost(commentsMap);
+      setCommentCounts(commentCountMap);
+    }
+
+    /*
+     * ==========================================
+     * 投稿者・コメント投稿者プロフィール
+     * ==========================================
+     */
+
+    const userIds = new Set(
+      postList.map((post) => post.user_id)
+    );
+
+    for (const comment of commentData || []) {
+      userIds.add(comment.user_id);
+    }
+
+    const allUserIds = [...userIds];
+
+    if (allUserIds.length === 0) {
+      setProfiles({});
+      setLoadingPosts(false);
+      return;
+    }
+
+    const {
+      data: profileData,
+      error: profilesError,
+    } = await supabase
       .from("profiles")
-      .select("id, username, display_name, avatar_url")
-      .in("id", userIds);
+      .select(
+        "id, username, display_name, avatar_url"
+      )
+      .in("id", allUserIds);
 
     if (!profilesError) {
       const profileMap = {};
@@ -214,12 +304,16 @@ export default function SNSPage() {
     const cleanContent = content.trim();
 
     if (!cleanContent) {
-      setPostError("投稿内容を入力してください。");
+      setPostError(
+        "投稿内容を入力してください。"
+      );
       return;
     }
 
     if (cleanContent.length > 500) {
-      setPostError("投稿は500文字以内にしてください。");
+      setPostError(
+        "投稿は500文字以内にしてください。"
+      );
       return;
     }
 
@@ -230,15 +324,20 @@ export default function SNSPage() {
 
     setPosting(true);
 
-    const { error: insertError } = await supabase.from("posts").insert({
-      user_id: user.id,
-      content: cleanContent,
-    });
+    const { error: insertError } =
+      await supabase
+        .from("posts")
+        .insert({
+          user_id: user.id,
+          content: cleanContent,
+        });
 
     setPosting(false);
 
     if (insertError) {
-      setPostError("投稿できませんでした。もう一度お試しください。");
+      setPostError(
+        "投稿できませんでした。もう一度お試しください。"
+      );
       return;
     }
 
@@ -272,21 +371,19 @@ export default function SNSPage() {
       [postId]: true,
     }));
 
-    /*
-     * ==========================================
-     * いいね解除
-     * ==========================================
-     */
-
     if (isLiked) {
-      const { error: deleteError } = await supabase
+      const {
+        error: deleteError,
+      } = await supabase
         .from("likes")
         .delete()
         .eq("post_id", postId)
         .eq("user_id", user.id);
 
       if (deleteError) {
-        setError("いいねを解除できませんでした。");
+        setError(
+          "いいねを解除できませんでした。"
+        );
 
         setLikeLoading((current) => ({
           ...current,
@@ -304,24 +401,22 @@ export default function SNSPage() {
 
       setLikeCounts((current) => ({
         ...current,
-        [postId]: Math.max((current[postId] || 0) - 1, 0),
+        [postId]: Math.max(
+          (current[postId] || 0) - 1,
+          0
+        ),
       }));
     } else {
-      /*
-       * ==========================================
-       * いいね追加
-       * ==========================================
-       */
-
-      const { error: insertError } = await supabase.from("likes").insert({
-        user_id: user.id,
-        post_id: postId,
-      });
+      const {
+        error: insertError,
+      } = await supabase
+        .from("likes")
+        .insert({
+          user_id: user.id,
+          post_id: postId,
+        });
 
       if (insertError) {
-        /*
-         * すでに存在している場合など
-         */
         if (insertError.code === "23505") {
           setLikedPosts((current) => {
             const next = new Set(current);
@@ -329,10 +424,17 @@ export default function SNSPage() {
             return next;
           });
 
+          setLikeLoading((current) => ({
+            ...current,
+            [postId]: false,
+          }));
+
           return;
         }
 
-        setError("いいねできませんでした。");
+        setError(
+          "いいねできませんでした。"
+        );
 
         setLikeLoading((current) => ({
           ...current,
@@ -350,7 +452,8 @@ export default function SNSPage() {
 
       setLikeCounts((current) => ({
         ...current,
-        [postId]: (current[postId] || 0) + 1,
+        [postId]:
+          (current[postId] || 0) + 1,
       }));
     }
 
@@ -362,12 +465,213 @@ export default function SNSPage() {
 
   /*
    * ==========================================
+   * コメント欄開閉
+   * ==========================================
+   */
+
+  const toggleComments = (postId) => {
+    setExpandedComments((current) => {
+      const next = new Set(current);
+
+      if (next.has(postId)) {
+        next.delete(postId);
+      } else {
+        next.add(postId);
+      }
+
+      return next;
+    });
+  };
+
+  /*
+   * ==========================================
+   * コメント入力
+   * ==========================================
+   */
+
+  const handleCommentTextChange = (
+    postId,
+    value
+  ) => {
+    setCommentText((current) => ({
+      ...current,
+      [postId]: value,
+    }));
+  };
+
+  /*
+   * ==========================================
+   * コメント投稿
+   * ==========================================
+   */
+
+  const handleCommentSubmit = async (
+    event,
+    postId
+  ) => {
+    event.preventDefault();
+
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+
+    const cleanText = (
+      commentText[postId] || ""
+    ).trim();
+
+    if (!cleanText) {
+      return;
+    }
+
+    if (cleanText.length > 300) {
+      setError(
+        "コメントは300文字以内にしてください。"
+      );
+      return;
+    }
+
+    if (commentLoading[postId]) {
+      return;
+    }
+
+    setCommentLoading((current) => ({
+      ...current,
+      [postId]: true,
+    }));
+
+    const parentCommentId =
+      replyingTo[postId] || null;
+
+    const {
+      error: insertError,
+    } = await supabase
+      .from("comments")
+      .insert({
+        post_id: postId,
+        user_id: user.id,
+        content: cleanText,
+        parent_comment_id:
+          parentCommentId,
+      });
+
+    setCommentLoading((current) => ({
+      ...current,
+      [postId]: false,
+    }));
+
+    if (insertError) {
+      setError(
+        "コメントを投稿できませんでした。"
+      );
+      return;
+    }
+
+    setCommentText((current) => ({
+      ...current,
+      [postId]: "",
+    }));
+
+    setReplyingTo((current) => ({
+      ...current,
+      [postId]: null,
+    }));
+
+    setExpandedComments((current) => {
+      const next = new Set(current);
+      next.add(postId);
+      return next;
+    });
+
+    await loadPosts(user.id);
+  };
+
+  /*
+   * ==========================================
+   * 返信開始
+   * ==========================================
+   */
+
+  const handleReply = (
+    postId,
+    comment
+  ) => {
+    setReplyingTo((current) => ({
+      ...current,
+      [postId]: comment.id,
+    }));
+
+    setCommentText((current) => ({
+      ...current,
+      [postId]:
+        current[postId] || "",
+    }));
+
+    setExpandedComments((current) => {
+      const next = new Set(current);
+      next.add(postId);
+      return next;
+    });
+  };
+
+  /*
+   * ==========================================
+   * 返信キャンセル
+   * ==========================================
+   */
+
+  const cancelReply = (postId) => {
+    setReplyingTo((current) => ({
+      ...current,
+      [postId]: null,
+    }));
+  };
+
+  /*
+   * ==========================================
+   * コメント削除
+   * ==========================================
+   */
+
+  const handleDeleteComment = async (
+    commentId,
+    postId
+  ) => {
+    const confirmed = window.confirm(
+      "このコメントを削除しますか？"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const {
+      error: deleteError,
+    } = await supabase
+      .from("comments")
+      .delete()
+      .eq("id", commentId);
+
+    if (deleteError) {
+      setError(
+        "コメントを削除できませんでした。"
+      );
+      return;
+    }
+
+    await loadPosts(user?.id);
+  };
+
+  /*
+   * ==========================================
    * 投稿削除
    * ==========================================
    */
 
   const handleDelete = async (postId) => {
-    const confirmed = window.confirm("この投稿を削除しますか？");
+    const confirmed = window.confirm(
+      "この投稿を削除しますか？"
+    );
 
     if (!confirmed) {
       return;
@@ -375,18 +679,24 @@ export default function SNSPage() {
 
     setError("");
 
-    const { error: deleteError } = await supabase
+    const {
+      error: deleteError,
+    } = await supabase
       .from("posts")
       .delete()
       .eq("id", postId);
 
     if (deleteError) {
-      setError("投稿を削除できませんでした。");
+      setError(
+        "投稿を削除できませんでした。"
+      );
       return;
     }
 
     setPosts((currentPosts) =>
-      currentPosts.filter((post) => post.id !== postId)
+      currentPosts.filter(
+        (post) => post.id !== postId
+      )
     );
 
     setLikeCounts((current) => {
@@ -398,6 +708,18 @@ export default function SNSPage() {
     setLikedPosts((current) => {
       const next = new Set(current);
       next.delete(postId);
+      return next;
+    });
+
+    setCommentCounts((current) => {
+      const next = { ...current };
+      delete next[postId];
+      return next;
+    });
+
+    setCommentsByPost((current) => {
+      const next = { ...current };
+      delete next[postId];
       return next;
     });
   };
@@ -415,15 +737,20 @@ export default function SNSPage() {
 
   /*
    * ==========================================
-   * 読み込み中
+   * 読み込み
    * ==========================================
    */
 
   if (loading) {
     return (
       <main className={styles.loadingPage}>
-        <div className={styles.loadingLogo}>N</div>
-        <p>Neqpolaを読み込んでいます...</p>
+        <div className={styles.loadingLogo}>
+          N
+        </div>
+
+        <p>
+          Neqpolaを読み込んでいます...
+        </p>
       </main>
     );
   }
@@ -439,13 +766,28 @@ export default function SNSPage() {
       {/* Header */}
       <header className={styles.header}>
         <div className={styles.headerInner}>
-          <a href="/" className={styles.logo}>
-            <span className={styles.logoMark}>N</span>
-            <span className={styles.logoText}>Neqpola</span>
+          <a
+            href="/"
+            className={styles.logo}
+          >
+            <span
+              className={styles.logoMark}
+            >
+              N
+            </span>
+
+            <span
+              className={styles.logoText}
+            >
+              Neqpola
+            </span>
           </a>
 
           <nav className={styles.nav}>
-            <a href="/sns" className={styles.navActive}>
+            <a
+              href="/sns"
+              className={styles.navActive}
+            >
               ホーム
             </a>
 
@@ -468,7 +810,7 @@ export default function SNSPage() {
         </div>
       </header>
 
-      {/* Main Layout */}
+      {/* Main */}
       <div className={styles.layout}>
         {/* Left Sidebar */}
         <aside className={styles.sidebar}>
@@ -487,11 +829,13 @@ export default function SNSPage() {
 
             <div className={styles.profileName}>
               <strong>
-                {profile?.display_name || "Neqpolaユーザー"}
+                {profile?.display_name ||
+                  "Neqpolaユーザー"}
               </strong>
 
               <span>
-                @{profile?.username || "user"}
+                @{profile?.username ||
+                  "user"}
               </span>
             </div>
 
@@ -511,13 +855,17 @@ export default function SNSPage() {
           </div>
 
           <div className={styles.sidebarCard}>
-            <span className={styles.sidebarLabel}>
+            <span
+              className={styles.sidebarLabel}
+            >
               NEQPOLA
             </span>
 
             <a
               href="/sns"
-              className={styles.sidebarLinkActive}
+              className={
+                styles.sidebarLinkActive
+              }
             >
               <span>🏠</span>
               ホーム
@@ -545,7 +893,9 @@ export default function SNSPage() {
         <section className={styles.feed}>
           <div className={styles.feedHeading}>
             <div>
-              <span className={styles.sectionLabel}>
+              <span
+                className={styles.sectionLabel}
+              >
                 NEQPOLA SNS
               </span>
 
@@ -558,8 +908,12 @@ export default function SNSPage() {
 
             <button
               type="button"
-              className={styles.refreshButton}
-              onClick={() => loadPosts(user?.id)}
+              className={
+                styles.refreshButton
+              }
+              onClick={() =>
+                loadPosts(user?.id)
+              }
               disabled={loadingPosts}
               aria-label="投稿を更新"
               title="投稿を更新"
@@ -573,8 +927,12 @@ export default function SNSPage() {
             className={styles.composer}
             onSubmit={handleSubmit}
           >
-            <div className={styles.composerTop}>
-              <div className={styles.smallAvatar}>
+            <div
+              className={styles.composerTop}
+            >
+              <div
+                className={styles.smallAvatar}
+              >
                 {profile?.avatar_url ? (
                   <img
                     src={profile.avatar_url}
@@ -586,13 +944,17 @@ export default function SNSPage() {
                 )}
               </div>
 
-              <div className={styles.composerUser}>
+              <div
+                className={styles.composerUser}
+              >
                 <strong>
-                  {profile?.display_name || "Neqpolaユーザー"}
+                  {profile?.display_name ||
+                    "Neqpolaユーザー"}
                 </strong>
 
                 <span>
-                  @{profile?.username || "user"}
+                  @{profile?.username ||
+                    "user"}
                 </span>
               </div>
             </div>
@@ -600,15 +962,25 @@ export default function SNSPage() {
             <textarea
               value={content}
               onChange={(event) =>
-                setContent(event.target.value)
+                setContent(
+                  event.target.value
+                )
               }
               placeholder="いま何してる？"
               maxLength={500}
               rows={4}
             />
 
-            <div className={styles.composerBottom}>
-              <span className={styles.characterCount}>
+            <div
+              className={
+                styles.composerBottom
+              }
+            >
+              <span
+                className={
+                  styles.characterCount
+                }
+              >
                 {content.length}/500
               </span>
 
@@ -617,7 +989,9 @@ export default function SNSPage() {
                 className={styles.postButton}
                 disabled={posting}
               >
-                {posting ? "投稿中..." : "投稿する"}
+                {posting
+                  ? "投稿中..."
+                  : "投稿する"}
 
                 {!posting && (
                   <span>→</span>
@@ -626,7 +1000,9 @@ export default function SNSPage() {
             </div>
 
             {postError && (
-              <div className={styles.formError}>
+              <div
+                className={styles.formError}
+              >
                 {postError}
               </div>
             )}
@@ -641,8 +1017,12 @@ export default function SNSPage() {
           {/* Timeline */}
           <div className={styles.timeline}>
             {loadingPosts ? (
-              <div className={styles.emptyState}>
-                <div className={styles.emptyIcon}>
+              <div
+                className={styles.emptyState}
+              >
+                <div
+                  className={styles.emptyIcon}
+                >
                   ◌
                 </div>
 
@@ -651,8 +1031,12 @@ export default function SNSPage() {
                 </p>
               </div>
             ) : posts.length === 0 ? (
-              <div className={styles.emptyState}>
-                <div className={styles.emptyIcon}>
+              <div
+                className={styles.emptyState}
+              >
+                <div
+                  className={styles.emptyIcon}
+                >
                   ✦
                 </div>
 
@@ -667,7 +1051,9 @@ export default function SNSPage() {
             ) : (
               posts.map((post) => {
                 const postProfile =
-                  profiles[post.user_id];
+                  profiles[
+                    post.user_id
+                  ];
 
                 const displayName =
                   postProfile?.display_name ||
@@ -678,45 +1064,107 @@ export default function SNSPage() {
                   "user";
 
                 const initial =
-                  getInitial(displayName);
+                  getInitial(
+                    displayName
+                  );
 
                 const isOwnPost =
-                  user?.id === post.user_id;
+                  user?.id ===
+                  post.user_id;
 
                 const isLiked =
-                  likedPosts.has(post.id);
+                  likedPosts.has(
+                    post.id
+                  );
 
                 const likeCount =
-                  likeCounts[post.id] || 0;
+                  likeCounts[post.id] ||
+                  0;
+
+                const postComments =
+                  commentsByPost[
+                    post.id
+                  ] || [];
+
+                const commentCount =
+                  commentCounts[
+                    post.id
+                  ] || 0;
+
+                const commentsOpen =
+                  expandedComments.has(
+                    post.id
+                  );
+
+                const replyTarget =
+                  replyingTo[
+                    post.id
+                  ] || null;
+
+                const topLevelComments =
+                  postComments.filter(
+                    (comment) =>
+                      !comment.parent_comment_id
+                  );
+
+                const replies =
+                  postComments.filter(
+                    (comment) =>
+                      comment.parent_comment_id
+                  );
 
                 return (
                   <article
                     key={post.id}
-                    className={styles.postCard}
+                    className={
+                      styles.postCard
+                    }
                   >
                     {/* Post Header */}
-                    <div className={styles.postHeader}>
-                      <div className={styles.postUser}>
-                        <div className={styles.postAvatar}>
+                    <div
+                      className={
+                        styles.postHeader
+                      }
+                    >
+                      <div
+                        className={
+                          styles.postUser
+                        }
+                      >
+                        <div
+                          className={
+                            styles.postAvatar
+                          }
+                        >
                           {postProfile?.avatar_url ? (
                             <img
-                              src={postProfile.avatar_url}
+                              src={
+                                postProfile.avatar_url
+                              }
                               alt=""
-                              className={styles.avatarImage}
+                              className={
+                                styles.avatarImage
+                              }
                             />
                           ) : (
                             initial
                           )}
                         </div>
 
-                        <div className={styles.postUserText}>
+                        <div
+                          className={
+                            styles.postUserText
+                          }
+                        >
                           <strong>
                             {displayName}
                           </strong>
 
                           <span>
                             @{username} ・{" "}
-                            {formatDate(post.created_at)}
+                            {formatDate(
+                              post.created_at
+                            )}
                           </span>
                         </div>
                       </div>
@@ -724,9 +1172,13 @@ export default function SNSPage() {
                       {isOwnPost && (
                         <button
                           type="button"
-                          className={styles.deleteButton}
+                          className={
+                            styles.deleteButton
+                          }
                           onClick={() =>
-                            handleDelete(post.id)
+                            handleDelete(
+                              post.id
+                            )
                           }
                           title="投稿を削除"
                         >
@@ -735,13 +1187,21 @@ export default function SNSPage() {
                       )}
                     </div>
 
-                    {/* Post Content */}
-                    <div className={styles.postContent}>
+                    {/* Post */}
+                    <div
+                      className={
+                        styles.postContent
+                      }
+                    >
                       {post.content}
                     </div>
 
-                    {/* Post Actions */}
-                    <div className={styles.postActions}>
+                    {/* Actions */}
+                    <div
+                      className={
+                        styles.postActions
+                      }
+                    >
                       <button
                         type="button"
                         className={`${styles.likeButton} ${
@@ -750,17 +1210,27 @@ export default function SNSPage() {
                             : ""
                         }`}
                         onClick={() =>
-                          handleLike(post.id)
+                          handleLike(
+                            post.id
+                          )
                         }
                         disabled={
-                          likeLoading[post.id]
+                          likeLoading[
+                            post.id
+                          ]
                         }
-                        aria-pressed={isLiked}
+                        aria-pressed={
+                          isLiked
+                        }
                       >
                         <span
-                          className={styles.likeIcon}
+                          className={
+                            styles.likeIcon
+                          }
                         >
-                          {isLiked ? "♥" : "♡"}
+                          {isLiked
+                            ? "♥"
+                            : "♡"}
                         </span>
 
                         <span>
@@ -768,20 +1238,478 @@ export default function SNSPage() {
                         </span>
 
                         <span
-                          className={styles.likeCount}
+                          className={
+                            styles.likeCount
+                          }
                         >
                           {likeCount}
                         </span>
                       </button>
 
-                      <button type="button">
-                        💬 <span>コメント</span>
+                      <button
+                        type="button"
+                        className={
+                          commentsOpen
+                            ? styles.commentButtonActive
+                            : ""
+                        }
+                        onClick={() =>
+                          toggleComments(
+                            post.id
+                          )
+                        }
+                        aria-expanded={
+                          commentsOpen
+                        }
+                      >
+                        💬
+                        <span>
+                          コメント
+                        </span>
+
+                        <span
+                          className={
+                            styles.likeCount
+                          }
+                        >
+                          {commentCount}
+                        </span>
                       </button>
 
-                      <button type="button">
+                      <button
+                        type="button"
+                      >
                         ↗ <span>共有</span>
                       </button>
                     </div>
+
+                    {/* Comments */}
+                    {commentsOpen && (
+                      <div
+                        className={
+                          styles.commentsSection
+                        }
+                      >
+                        <div
+                          className={
+                            styles.commentsTitle
+                          }
+                        >
+                          <strong>
+                            コメント
+                          </strong>
+
+                          <span>
+                            {commentCount}件
+                          </span>
+                        </div>
+
+                        <div
+                          className={
+                            styles.commentList
+                          }
+                        >
+                          {topLevelComments.length ===
+                          0 ? (
+                            <div
+                              className={
+                                styles.noComments
+                              }
+                            >
+                              まだコメントはありません。
+                            </div>
+                          ) : (
+                            topLevelComments.map(
+                              (comment) => {
+                                const commentProfile =
+                                  profiles[
+                                    comment.user_id
+                                  ];
+
+                                const commentName =
+                                  commentProfile?.display_name ||
+                                  "Neqpolaユーザー";
+
+                                const commentUsername =
+                                  commentProfile?.username ||
+                                  "user";
+
+                                const commentInitial =
+                                  getInitial(
+                                    commentName
+                                  );
+
+                                const commentReplies =
+                                  replies.filter(
+                                    (reply) =>
+                                      reply.parent_comment_id ===
+                                      comment.id
+                                  );
+
+                                const ownComment =
+                                  user?.id ===
+                                  comment.user_id;
+
+                                return (
+                                  <div
+                                    key={
+                                      comment.id
+                                    }
+                                    className={
+                                      styles.commentThread
+                                    }
+                                  >
+                                    <div
+                                      className={
+                                        styles.commentItem
+                                      }
+                                    >
+                                      <div
+                                        className={
+                                          styles.commentAvatar
+                                        }
+                                      >
+                                        {commentProfile?.avatar_url ? (
+                                          <img
+                                            src={
+                                              commentProfile.avatar_url
+                                            }
+                                            alt=""
+                                            className={
+                                              styles.avatarImage
+                                            }
+                                          />
+                                        ) : (
+                                          commentInitial
+                                        )}
+                                      </div>
+
+                                      <div
+                                        className={
+                                          styles.commentBody
+                                        }
+                                      >
+                                        <div
+                                          className={
+                                            styles.commentMeta
+                                          }
+                                        >
+                                          <strong>
+                                            {
+                                              commentName
+                                            }
+                                          </strong>
+
+                                          <span>
+                                            @
+                                            {
+                                              commentUsername
+                                            }{" "}
+                                            ・{" "}
+                                            {formatDate(
+                                              comment.created_at
+                                            )}
+                                          </span>
+                                        </div>
+
+                                        <p
+                                          className={
+                                            styles.commentContent
+                                          }
+                                        >
+                                          {
+                                            comment.content
+                                          }
+                                        </p>
+
+                                        <div
+                                          className={
+                                            styles.commentActions
+                                          }
+                                        >
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleReply(
+                                                post.id,
+                                                comment
+                                              )
+                                            }
+                                          >
+                                            ↩ 返信
+                                          </button>
+
+                                          {ownComment && (
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handleDeleteComment(
+                                                  comment.id,
+                                                  post.id
+                                                )
+                                              }
+                                            >
+                                              削除
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Replies */}
+                                    {commentReplies.length >
+                                      0 && (
+                                      <div
+                                        className={
+                                          styles.replyList
+                                        }
+                                      >
+                                        {commentReplies.map(
+                                          (
+                                            reply
+                                          ) => {
+                                            const replyProfile =
+                                              profiles[
+                                                reply.user_id
+                                              ];
+
+                                            const replyName =
+                                              replyProfile?.display_name ||
+                                              "Neqpolaユーザー";
+
+                                            const replyUsername =
+                                              replyProfile?.username ||
+                                              "user";
+
+                                            const replyInitial =
+                                              getInitial(
+                                                replyName
+                                              );
+
+                                            const ownReply =
+                                              user?.id ===
+                                              reply.user_id;
+
+                                            return (
+                                              <div
+                                                key={
+                                                  reply.id
+                                                }
+                                                className={
+                                                  styles.commentItem
+                                                }
+                                              >
+                                                <div
+                                                  className={
+                                                    styles.commentAvatar
+                                                  }
+                                                >
+                                                  {replyProfile?.avatar_url ? (
+                                                    <img
+                                                      src={
+                                                        replyProfile.avatar_url
+                                                      }
+                                                      alt=""
+                                                      className={
+                                                        styles.avatarImage
+                                                      }
+                                                    />
+                                                  ) : (
+                                                    replyInitial
+                                                  )}
+                                                </div>
+
+                                                <div
+                                                  className={
+                                                    styles.commentBody
+                                                  }
+                                                >
+                                                  <div
+                                                    className={
+                                                      styles.commentMeta
+                                                    }
+                                                  >
+                                                    <strong>
+                                                      {
+                                                        replyName
+                                                      }
+                                                    </strong>
+
+                                                    <span>
+                                                      @
+                                                      {
+                                                        replyUsername
+                                                      }{" "}
+                                                      ・{" "}
+                                                      {formatDate(
+                                                        reply.created_at
+                                                      )}
+                                                    </span>
+                                                  </div>
+
+                                                  <p
+                                                    className={
+                                                      styles.commentContent
+                                                    }
+                                                  >
+                                                    {
+                                                      reply.content
+                                                    }
+                                                  </p>
+
+                                                  {ownReply && (
+                                                    <div
+                                                      className={
+                                                        styles.commentActions
+                                                      }
+                                                    >
+                                                      <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                          handleDeleteComment(
+                                                            reply.id,
+                                                            post.id
+                                                          )
+                                                        }
+                                                      >
+                                                        削除
+                                                      </button>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            );
+                                          }
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+                            )
+                          )}
+                        </div>
+
+                        {/* Reply status */}
+                        {replyTarget && (
+                          <div
+                            className={
+                              styles.replyingBar
+                            }
+                          >
+                            <span>
+                              返信モード
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                cancelReply(
+                                  post.id
+                                )
+                              }
+                            >
+                              キャンセル
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Comment Form */}
+                        <form
+                          className={
+                            styles.commentForm
+                          }
+                          onSubmit={(event) =>
+                            handleCommentSubmit(
+                              event,
+                              post.id
+                            )
+                          }
+                        >
+                          <div
+                            className={
+                              styles.commentFormAvatar
+                            }
+                          >
+                            {profile?.avatar_url ? (
+                              <img
+                                src={
+                                  profile.avatar_url
+                                }
+                                alt=""
+                                className={
+                                  styles.avatarImage
+                                }
+                              />
+                            ) : (
+                              currentUserInitial
+                            )}
+                          </div>
+
+                          <div
+                            className={
+                              styles.commentFormMain
+                            }
+                          >
+                            <textarea
+                              value={
+                                commentText[
+                                  post.id
+                                ] || ""
+                              }
+                              onChange={(event) =>
+                                handleCommentTextChange(
+                                  post.id,
+                                  event.target.value
+                                )
+                              }
+                              placeholder={
+                                replyTarget
+                                  ? "返信を書く..."
+                                  : "コメントを書く..."
+                              }
+                              maxLength={300}
+                              rows={2}
+                            />
+
+                            <div
+                              className={
+                                styles.commentFormBottom
+                              }
+                            >
+                              <span>
+                                {(commentText[
+                                  post.id
+                                ] || "").length}
+                                /300
+                              </span>
+
+                              <button
+                                type="submit"
+                                disabled={
+                                  commentLoading[
+                                    post.id
+                                  ] ||
+                                  !(
+                                    commentText[
+                                      post.id
+                                    ] || ""
+                                  ).trim()
+                                }
+                              >
+                                {commentLoading[
+                                  post.id
+                                ]
+                                  ? "送信中..."
+                                  : replyTarget
+                                  ? "返信する"
+                                  : "コメントする"}
+                              </button>
+                            </div>
+                          </div>
+                        </form>
+                      </div>
+                    )}
                   </article>
                 );
               })
@@ -790,9 +1718,15 @@ export default function SNSPage() {
         </section>
 
         {/* Right Sidebar */}
-        <aside className={styles.rightSidebar}>
-          <div className={styles.aboutCard}>
-            <span className={styles.sidebarLabel}>
+        <aside
+          className={styles.rightSidebar}
+        >
+          <div
+            className={styles.aboutCard}
+          >
+            <span
+              className={styles.sidebarLabel}
+            >
               ABOUT NEQPOLA
             </span>
 
@@ -807,7 +1741,9 @@ export default function SNSPage() {
             </p>
           </div>
 
-          <div className={styles.tipCard}>
+          <div
+            className={styles.tipCard}
+          >
             <span>✦</span>
 
             <div>
@@ -825,7 +1761,8 @@ export default function SNSPage() {
 
       {/* Footer */}
       <footer className={styles.footer}>
-        © {new Date().getFullYear()} Neqpola. All rights reserved.
+        © {new Date().getFullYear()} Neqpola.
+        All rights reserved.
       </footer>
     </main>
   );
