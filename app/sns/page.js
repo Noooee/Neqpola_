@@ -455,6 +455,23 @@ export default function SNSPage() {
         [postId]:
           (current[postId] || 0) + 1,
       }));
+
+      // 自分の投稿へのいいねは通知しない
+      const targetPost = posts.find((post) => String(post.id) === String(postId));
+      if (targetPost && targetPost.user_id !== user.id) {
+        const { error: notificationError } = await supabase
+          .from("notifications")
+          .insert({
+            user_id: targetPost.user_id,
+            actor_id: user.id,
+            type: "like",
+            post_id: postId,
+          });
+
+        if (notificationError) {
+          console.error("いいね通知を作成できませんでした:", notificationError.message);
+        }
+      }
     }
 
     setLikeLoading((current) => ({
@@ -544,6 +561,7 @@ export default function SNSPage() {
       replyingTo[postId] || null;
 
     const {
+      data: insertedComment,
       error: insertError,
     } = await supabase
       .from("comments")
@@ -553,7 +571,9 @@ export default function SNSPage() {
         content: cleanText,
         parent_comment_id:
           parentCommentId,
-      });
+      })
+      .select("id")
+      .single();
 
     setCommentLoading((current) => ({
       ...current,
@@ -565,6 +585,24 @@ export default function SNSPage() {
         "コメントを投稿できませんでした。"
       );
       return;
+    }
+
+    // 投稿者へのコメント通知（自分自身への通知は作らない）
+    const targetPost = posts.find((post) => String(post.id) === String(postId));
+    if (targetPost && targetPost.user_id !== user.id && insertedComment?.id) {
+      const { error: notificationError } = await supabase
+        .from("notifications")
+        .insert({
+          user_id: targetPost.user_id,
+          actor_id: user.id,
+          type: "comment",
+          post_id: postId,
+          comment_id: insertedComment.id,
+        });
+
+      if (notificationError) {
+        console.error("コメント通知を作成できませんでした:", notificationError.message);
+      }
     }
 
     setCommentText((current) => ({
@@ -791,7 +829,7 @@ export default function SNSPage() {
               ホーム
             </a>
 
-            <a href="#">
+            <a href="/notifications">
               通知
             </a>
 
@@ -872,7 +910,7 @@ export default function SNSPage() {
             </a>
 
             <a
-              href="#"
+              href="/notifications"
               className={styles.sidebarLink}
             >
               <span>🔔</span>
