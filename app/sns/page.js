@@ -795,7 +795,7 @@ export default function SNSPage() {
               通知
             </a>
 
-            <a href="#">
+            <a href="/profile">
               プロフィール
             </a>
           </nav>
@@ -848,7 +848,7 @@ export default function SNSPage() {
             <button
               type="button"
               className={styles.profileButton}
-              onClick={() => router.push("/")}
+              onClick={() => router.push("/profile")}
             >
               プロフィールを見る
             </button>
